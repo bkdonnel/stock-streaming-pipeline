@@ -1,0 +1,39 @@
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+
+# Environment variables
+.env
+*.env
+
+# IDE
+.vscode/
+.idea/
+
+# Databricks
+.databricks/
+
+# Logs
+*.log
+logs/
+
+# Data files
+*.csv
+*.parquet
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Kafka
+kafka-logs/
+zookeeper-data/
