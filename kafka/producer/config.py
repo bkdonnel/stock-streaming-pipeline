@@ -13,9 +13,9 @@ class Config:
     ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY')
 
     # Kafka Configuration
-    KAFKA_BOOSTRAP_SERVERS = os.getenv(
-        'KAFKA_BOOSTRAP_SERVERS',
-        'localhost:9902'
+    KAFKA_BOOTSTRAP_SERVERS = os.getenv(
+        'KAFKA_BOOTSTRAP_SERVERS',
+        'localhost:9092'
     )
     KAFKA_TOPIC = os.getenv('KAFKA_TOPIC', 'stock-prices')
 
@@ -42,8 +42,8 @@ class Config:
         if not cls.POLYGON_API_KEY and not cls.ALPHA_VANTAGE_API_KEY:
             raise ValueError("At least one API key is required")
         
-        if not cls.KAFKA_BOOSTRAP_SERVERS:
-            raise ValueError("KAFKA_BOOSTRAP_SERVERS required")
+        if not cls.KAFKA_BOOTSTRAP_SERVERS:
+            raise ValueError("KAFKA_BOOTSTRAP_SERVERS required")
         
         return True
 
