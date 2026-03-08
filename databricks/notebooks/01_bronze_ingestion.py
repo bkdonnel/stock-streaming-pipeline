@@ -75,8 +75,8 @@ def fetch_daily_ohlcv(symbol: str, api_key: str, run_date: str) -> Optional[dict
     try:
         response = requests.get(url, params=params, timeout=10)
 
-        if response.status_code == 404:
-            logger.warning("No data for %s on %s (market may have been closed)", symbol, run_date)
+        if response.status_code in (403, 404):
+            logger.warning("No data for %s on %s (market closed or date unavailable)", symbol, run_date)
             return None
 
         response.raise_for_status()
@@ -121,7 +121,8 @@ if failed:
     print(f"Skipped symbols: {failed}")
 
 if not records:
-    raise RuntimeError(f"No data fetched for any symbol on {RUN_DATE}. Aborting write.")
+    logger.warning("No data fetched for any symbol on %s — market likely closed. Exiting.", RUN_DATE)
+    dbutils.notebook.exit("No data — market closed")
 
 # COMMAND ----------
 
