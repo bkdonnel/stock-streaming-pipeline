@@ -29,7 +29,7 @@ Daily batch pipeline that fetches stock market data after market close, computes
         ▼
    ┌───────────┐
    │ Snowflake │ (serving layer)
-   │  MARTS    │ DIM_STOCKS, FCT_STOCK_PRICES, FCT_TECHNICAL_INDICATORS
+   │   BRYAN   │ FCT_STOCK_PRICES, FCT_TECHNICAL_INDICATORS
    └─────┬─────┘
          │
          ▼
@@ -48,13 +48,14 @@ Daily batch pipeline that fetches stock market data after market close, computes
 - **Unity Catalog**: Workspace uses Unity Catalog; all tables live under the `bootcamp_students` catalog
 - **Auth**: OAuth-based CLI authentication (Personal Access Tokens disabled at workspace level)
 - **Secrets**: Polygon API key stored in Databricks Secrets (scope: `stock-pipeline`)
+- **Git Integration**: Databricks Repos (Git Folders) connected to GitHub (`bkdonnel/stock-streaming-pipeline`); notebooks are version-controlled and synced via Pull in the UI
 
 ### Data Flow
 1. **Ingest**: Databricks job calls Polygon API, fetches daily OHLCV for AAPL, GOOGL, MSFT, TSLA, AMZN
 2. **Bronze**: Raw data written to Delta Lake as-is — immutable, append-only
 3. **Silver**: Data cleaned, validated, and deduplicated
 4. **Gold**: Technical indicators computed and joined with price data
-5. **Store**: Gold layer written to Snowflake MARTS schema
+5. **Store**: Gold layer written to Snowflake `DATAEXPERT_STUDENT.BRYAN` via `snowflake-connector-python`
 6. **Visualize**: Streamlit queries Snowflake, renders charts
 
 ### Medallion Architecture (Delta Lake)
@@ -70,10 +71,11 @@ Daily batch pipeline that fetches stock market data after market close, computes
 
 ### Snowflake (Serving Layer)
 
-**MARTS Schema:**
-- `DIM_STOCKS` — stock dimension (symbol, company name, sector)
-- `FCT_STOCK_PRICES` — daily price facts (OHLC, volume, vwap)
-- `FCT_TECHNICAL_INDICATORS` — indicator facts (SMA, EMA, RSI, MACD, BB)
+**Schema: `DATAEXPERT_STUDENT.BRYAN`** (single schema — shared community account limitation)
+- `FCT_STOCK_PRICES` — daily price facts (symbol, date, open, high, low, close, volume, vwap, source, ingested_at, transformed_at)
+- `FCT_TECHNICAL_INDICATORS` — indicator facts (symbol, date, sma_20, sma_50, ema_12, ema_26, rsi_14, macd_line, macd_signal, macd_histogram, bb_upper, bb_middle, bb_lower)
+
+**Auth:** RSA key pair — `snowflake-connector-python` with `load_pem_private_key` → DER bytes. Public key registered via `ALTER USER BRYAN SET RSA_PUBLIC_KEY='...'`.
 
 ### Technical Indicators
 All computed in the Gold notebook on daily closing prices:

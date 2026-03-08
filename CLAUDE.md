@@ -13,15 +13,31 @@ Tracked stocks: AAPL, GOOGL, MSFT, TSLA, AMZN.
   - Schemas created: `bootcamp_students.bd_bronze`, `bootcamp_students.bd_silver`, `bootcamp_students.bd_gold` (prefixed with `bd_` — `bootcamp_students` is a shared community catalog)
   - `databricks/config.py` written — reads secret on cluster, falls back to `.env` locally
   - `databricks/notebooks/00_setup.py` written and verified — packages, schemas, secret, and Polygon API all confirmed
-- **Phase 2 (Bronze Layer - Ingestion):** Built (`databricks/notebooks/01_bronze_ingestion.py`) — pending test run in Databricks
+- **Phase 2 (Bronze Layer - Ingestion):** Complete
   - `fetch_daily_ohlcv()` implemented using Polygon `/v1/open-close/{symbol}/{date}` endpoint
   - Loops over all 5 symbols, collects records, writes to `bootcamp_students.bd_bronze.stock_prices` (Delta, append mode)
   - Supports `run_date` widget for backfills; defaults to yesterday
   - Gracefully skips 404s (holidays/weekends)
-- **Phase 3 (Silver Layer - Cleaning):** Not started
-- **Phase 4 (Gold Layer - Indicators):** Not started
-- **Phase 5 (Snowflake Integration):** Not started
-- **Phase 6 (Streamlit Dashboard):** Not started
+  - Verified: 5 rows written and confirmed via `spark.table().show()` (2026-03-06 data)
+  - Note: `vwap` is `0.0` for all rows — Polygon's `/v1/open-close` endpoint does not return vwap; field is retained for schema compatibility
+- **Phase 3 (Silver Layer - Cleaning):** Complete
+  - `02_silver_transform.py` built and tested — 5 rows in, 5 rows out, no drops
+  - Casts `date` to `DateType`, drops null/zero closes, deduplicates on `(symbol, date)` by most recent `ingested_at`, adds `transformed_at` timestamp
+  - Writes to `bootcamp_students.bd_silver.stock_prices` (Delta, overwrite mode)
+- **Phase 4 (Gold Layer - Indicators):** Complete
+  - `databricks/indicators.py` — pure functions: `calculate_sma`, `calculate_ema`, `calculate_rsi`, `calculate_macd`, `calculate_bollinger_bands`, `add_indicators`
+  - `03_gold_indicators.py` — reads Silver, applies `add_indicators` per symbol via `groupBy("symbol").applyInPandas()`, writes to `bootcamp_students.bd_gold.stock_indicators` (Delta, overwrite mode)
+  - Repo path resolved dynamically at runtime so import works regardless of Databricks user email
+  - Verified: 5 rows in, 5 rows out, 22 columns (symbol + date + 20 indicator fields)
+- **Phase 5 (Snowflake Integration):** Complete
+  - Snowflake account: `LYWBBPJ-ODB66944`, database: `DATAEXPERT_STUDENT`, schema: `BRYAN`
+  - Auth: RSA key pair — public key registered in Snowflake UI, private key stored in Databricks Secrets
+  - Secrets stored in scope `stock-pipeline`: `snowflake-account`, `snowflake-user`, `snowflake-private-key`, `snowflake-database`, `snowflake-schema`
+  - Rewrote from Spark connector (Maven) to `snowflake-connector-python` + `cryptography` — Spark connector caused JWT auth failures on the shared DataExpert cluster
+  - `04_snowflake_load.py` uses `%pip install snowflake-connector-python cryptography`, parses PEM key via `load_pem_private_key` → DER bytes, writes via pandas (5 rows)
+  - Verified: `FCT_STOCK_PRICES` and `FCT_TECHNICAL_INDICATORS` written and read back successfully
+  - Key lessons: shared cluster is serverless (blocks Maven connectors); RSA public key in Snowflake must match private key in Databricks Secrets (fingerprint mismatch was root cause of JWT errors)
+- **Phase 6 (Streamlit Dashboard):** Not started — will deploy to Streamlit Community Cloud for public portfolio URL
 - **Phase 7 (Scheduling & Monitoring):** Not started
 
 See `IMPLEMENTATION.md` for the full phase-by-phase plan and `ARCHITECTURE.md` for system design.
@@ -39,6 +55,8 @@ The technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands) are all designed
 - **Unity Catalog** — workspace uses Unity Catalog; catalog is `bootcamp_students`
 - **Auth** — Personal Access Tokens are disabled; CLI authenticated via OAuth (`databricks auth login`)
 - **Secrets** — API key stored in Databricks Secrets (scope: `stock-pipeline`, key: `polygon-api-key`)
+- **Compute** — shared DataExpert cluster (serverless); Maven packages not supported — use `%pip install` instead
+- **Git Integration** — Databricks Repos (Git Folders) connected to GitHub (`bkdonnel/stock-streaming-pipeline`); workflow is `git push` locally then Pull in Databricks UI — no manual notebook uploads needed
 
 ### Delta Lake Schemas (Unity Catalog)
 - `bootcamp_students.bd_bronze` — raw ingestion layer
@@ -51,7 +69,11 @@ The technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands) are all designed
 - Falls back to `POLYGON_API_KEY` in `.env` for local development
 
 ### Snowflake (Serving Layer)
-- Receives Gold layer data from Databricks
+- Account: `LYWBBPJ-ODB66944` (shared DataExpert community account)
+- Database: `DATAEXPERT_STUDENT`, Schema: `BRYAN`
+- Warehouse: `COMPUTE_WH`
+- Auth: RSA key pair (public key registered in Snowflake UI, private key in Databricks Secrets)
+- Tables: `FCT_STOCK_PRICES`, `FCT_TECHNICAL_INDICATORS`
 - Queried by Streamlit dashboard
 
 ## Deprecated (Kafka / Streaming)
@@ -84,7 +106,9 @@ databricks/
     01_bronze_ingestion.py    # Fetch from Polygon, write raw to Delta
     02_silver_transform.py    # Clean, validate, deduplicate
     03_gold_indicators.py     # Compute SMA, EMA, RSI, MACD, BB
+    04_snowflake_load.py      # Write Gold data to Snowflake FCT tables
   config.py                  # Shared Spark + API config (secrets + .env fallback)
+  indicators.py              # Pure indicator functions (calculate_sma, ema, rsi, macd, bb, add_indicators)
 dashboard/
   app.py                     # Streamlit dashboard
   requirements.txt           # Streamlit dependencies

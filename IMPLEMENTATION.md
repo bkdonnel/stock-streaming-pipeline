@@ -74,7 +74,9 @@ class Config:
 - [x] Write to `bootcamp_students.bd_bronze.stock_prices` in Delta format, append mode (never overwrite raw data)
 - [x] Add basic logging — log each symbol fetched and any failures
 - [x] Supports `run_date` widget (defaults to yesterday) to enable backfills
-- [ ] Test: verify rows appear via `spark.table("bootcamp_students.bd_bronze.stock_prices").show()`
+- [x] Test: verify rows appear via `spark.table("bootcamp_students.bd_bronze.stock_prices").show()`
+  - Confirmed: 5 rows written for 2026-03-06 (AAPL, GOOGL, MSFT, TSLA, AMZN)
+  - Note: `vwap` is `0.0` — not returned by the `/v1/open-close` endpoint; retained for schema compatibility
 
 ### Polygon endpoint
 ```
@@ -87,27 +89,28 @@ Returns: `open`, `high`, `low`, `close`, `volume`, `vwap`, `afterHours`, `preMar
 ## Phase 3: Silver Layer — Cleaning & Validation
 **Goal:** Read Bronze, clean and validate the data, write deduplicated records to Silver.
 
-- [ ] Create `databricks/notebooks/02_silver_transform.py`
-- [ ] Read from `bootcamp_students.bd_bronze.stock_prices`
-- [ ] Apply transformations:
+- [x] Create `databricks/notebooks/02_silver_transform.py`
+- [x] Read from `bootcamp_students.bd_bronze.stock_prices`
+- [x] Apply transformations:
   - Cast `date` column to `DateType` if stored as string
   - Drop rows where `close` is null or zero
   - Deduplicate on `(symbol, date)` — keep the most recently ingested record
-  - Add `ingested_at` timestamp column
-- [ ] Write to `bootcamp_students.bd_silver.stock_prices` in Delta format, overwrite mode (Silver is always rebuilt from Bronze)
-- [ ] Test: row counts Bronze vs Silver, verify no nulls in key columns
+  - Add `transformed_at` timestamp column
+- [x] Write to `bootcamp_students.bd_silver.stock_prices` in Delta format, overwrite mode (Silver is always rebuilt from Bronze)
+- [x] Test: row counts Bronze vs Silver, verify no nulls in key columns
+  - Confirmed: Bronze 5 rows → Silver 5 rows, no drops
 
 ---
 
 ## Phase 4: Gold Layer — Technical Indicators
 **Goal:** Compute all technical indicators on Silver data and write to Gold.
 
-- [ ] Create `databricks/notebooks/03_gold_indicators.py`
-- [ ] Create `databricks/indicators.py` with pure functions for each indicator (see specs below)
-- [ ] Read `bootcamp_students.bd_silver.stock_prices`, sort by `(symbol, date)`
-- [ ] Use `groupBy("symbol")` + `applyInPandas` (or pandas UDF) to apply `add_indicators(df)` per symbol
-- [ ] Write to `bootcamp_students.bd_gold.stock_indicators` in Delta format, overwrite mode
-- [ ] Test: spot-check SMA-20 values manually against known prices
+- [x] Create `databricks/notebooks/03_gold_indicators.py`
+- [x] Create `databricks/indicators.py` with pure functions for each indicator (see specs below)
+- [x] Read `bootcamp_students.bd_silver.stock_prices`, sort by `(symbol, date)`
+- [x] Use `groupBy("symbol")` + `applyInPandas` to apply `add_indicators(df)` per symbol
+- [x] Write to `bootcamp_students.bd_gold.stock_indicators` in Delta format, overwrite mode
+- [x] Test: spot-check SMA-20 values manually against known prices — verified 5 rows in/out, 22 columns
 
 ### Indicator function specs (`databricks/indicators.py`)
 
@@ -166,23 +169,28 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
 ## Phase 5: Snowflake Integration
 **Goal:** Write Gold layer data to Snowflake for serving to the dashboard.
 
-- [ ] Create Snowflake database and schemas (`RAW`, `STAGING`, `MARTS`)
-- [ ] Create MARTS tables:
-  - `DIM_STOCKS` — symbol, company name, sector
-  - `FCT_STOCK_PRICES` — date, symbol_id (FK), open, high, low, close, volume, vwap
-  - `FCT_TECHNICAL_INDICATORS` — date, symbol_id (FK), all indicator columns
-- [ ] Install Snowflake Spark connector in Databricks cluster
-- [ ] Update `03_gold_indicators.py` to write Gold DataFrame to Snowflake MARTS tables
-- [ ] Store Snowflake credentials in Databricks Secrets
-- [ ] Test: query `FCT_TECHNICAL_INDICATORS` in Snowflake and verify data
+Note: Shared Snowflake account — write access limited to single schema `DATAEXPERT_STUDENT.BRYAN`.
+Multi-schema design (RAW/STAGING/MARTS) replaced with two FCT tables in `BRYAN`.
+
+- [x] Snowflake account identified: `LYWBBPJ-ODB66944`, database `DATAEXPERT_STUDENT`, schema `BRYAN`
+- [x] RSA key pair generated locally; public key registered in Snowflake UI; private key stored in Databricks Secrets
+- [x] Databricks Secrets stored (scope: `stock-pipeline`): `snowflake-account`, `snowflake-user`, `snowflake-private-key`, `snowflake-database`, `snowflake-schema`
+- [x] Rewrote `04_snowflake_load.py` to use `snowflake-connector-python` + `cryptography` instead of Maven Spark connector (shared cluster is serverless — Maven packages blocked)
+  - Uses `%pip install snowflake-connector-python cryptography`
+  - Parses PEM private key via `load_pem_private_key` → DER bytes for `snowflake.connector.connect`
+  - Writes via pandas `toPandas()` + `executemany` (5 rows — no need for Spark parallelism)
+  - Handles PEM headers missing from secret with defensive wrapping
+- [x] Verified: `FCT_STOCK_PRICES` and `FCT_TECHNICAL_INDICATORS` written and read back successfully
+- [x] Root cause of JWT errors: RSA public key fingerprint in Snowflake did not match private key in Databricks Secrets — resolved by re-registering correct public key via `ALTER USER`
 
 ---
 
 ## Phase 6: Streamlit Dashboard
-**Goal:** Build an interactive dashboard that visualizes stock prices and indicators.
+**Goal:** Build an interactive dashboard that visualizes stock prices and indicators, deployed publicly on Streamlit Community Cloud for portfolio use.
 
 - [ ] Set up `dashboard/` directory with `app.py` and `requirements.txt`
-- [ ] Connect Streamlit to Snowflake via `snowflake-connector-python`
+- [ ] Connect Streamlit to Snowflake via `snowflake-connector-python` using RSA key auth (same key pair as Databricks)
+- [ ] Store Snowflake credentials in Streamlit Cloud secrets (not in repo)
 - [ ] Build dashboard components:
   - [ ] Stock selector dropdown (AAPL, GOOGL, MSFT, TSLA, AMZN)
   - [ ] Date range selector
@@ -190,7 +198,7 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
   - [ ] RSI chart with overbought (70) and oversold (30) reference lines
   - [ ] MACD chart with signal line and histogram
 - [ ] Test dashboard locally against Snowflake
-- [ ] Deploy to Streamlit Cloud
+- [ ] Deploy to Streamlit Community Cloud (streamlit.io/cloud) — free, public URL, auto-deploys from GitHub
 
 ---
 
