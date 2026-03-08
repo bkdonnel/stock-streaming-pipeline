@@ -83,7 +83,8 @@ def write_to_snowflake(conn, df, table_name: str, cols: list[str]) -> None:
 
     cursor = conn.cursor()
     try:
-        col_defs = ", ".join(f"{c.upper()} VARCHAR" if c in ("symbol", "source") else f"{c.upper()} VARIANT" for c in cols)
+        varchar_cols = {"symbol", "source", "date", "ingested_at", "transformed_at"}
+        col_defs = ", ".join(f"{c.upper()} VARCHAR" if c in varchar_cols else f"{c.upper()} FLOAT" for c in cols)
         cursor.execute(f"CREATE OR REPLACE TABLE {table_name} ({col_defs})")
 
         placeholders = ", ".join(["%s"] * len(cols))
