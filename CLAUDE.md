@@ -37,7 +37,14 @@ Tracked stocks: AAPL, GOOGL, MSFT, TSLA, AMZN.
   - `04_snowflake_load.py` uses `%pip install snowflake-connector-python cryptography`, parses PEM key via `load_pem_private_key` → DER bytes, writes via pandas (5 rows)
   - Verified: `FCT_STOCK_PRICES` and `FCT_TECHNICAL_INDICATORS` written and read back successfully
   - Key lessons: shared cluster is serverless (blocks Maven connectors); RSA public key in Snowflake must match private key in Databricks Secrets (fingerprint mismatch was root cause of JWT errors)
-- **Phase 6 (Streamlit Dashboard):** Not started — will deploy to Streamlit Community Cloud for public portfolio URL
+- **Phase 6 (Streamlit Dashboard):** In progress — app built, local testing blocked by RSA key mismatch
+  - `dashboard/app.py` written — stock dropdown, date picker, 3-panel Plotly chart (price+BB, RSI, MACD), metrics row
+  - `dashboard/requirements.txt` — streamlit, snowflake-connector-python, cryptography, pandas, plotly
+  - Decided on **Streamlit Community Cloud** (not Streamlit in Snowflake) — SiS requires Snowflake login, not publicly accessible
+  - Local secrets: `.streamlit/secrets.toml` (gitignored) — must be placed at `dashboard/.streamlit/secrets.toml` when running from `dashboard/` subdirectory
+  - **Blocker:** JWT token invalid on local test — `~/rsa_key.pem` fingerprint (`SHA256:PUw88...`) does not match the key registered in Snowflake (`SHA256:fXaWO...`)
+  - **Fix:** Extract the correct private key from Databricks Secrets: run `dbutils.secrets.get(scope="stock-pipeline", key="snowflake-private-key")` in a notebook cell, copy output into `secrets.toml`
+  - The authoritative private key lives in Databricks Secrets — local `.pem` files are copies that may be out of sync
 - **Phase 7 (Scheduling & Monitoring):** Not started
 
 See `IMPLEMENTATION.md` for the full phase-by-phase plan and `ARCHITECTURE.md` for system design.
@@ -110,8 +117,10 @@ databricks/
   config.py                  # Shared Spark + API config (secrets + .env fallback)
   indicators.py              # Pure indicator functions (calculate_sma, ema, rsi, macd, bb, add_indicators)
 dashboard/
-  app.py                     # Streamlit dashboard
-  requirements.txt           # Streamlit dependencies
+  app.py                     # Streamlit dashboard (stock dropdown, date picker, price/RSI/MACD charts)
+  requirements.txt           # streamlit, snowflake-connector-python, cryptography, pandas, plotly
+  .streamlit/
+    secrets.toml             # Snowflake credentials (gitignored — never commit)
 .env                         # API keys (gitignored)
 requirements.txt             # Python dependencies
 ARCHITECTURE.md              # System design and data model

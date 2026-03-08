@@ -188,17 +188,23 @@ Multi-schema design (RAW/STAGING/MARTS) replaced with two FCT tables in `BRYAN`.
 ## Phase 6: Streamlit Dashboard
 **Goal:** Build an interactive dashboard that visualizes stock prices and indicators, deployed publicly on Streamlit Community Cloud for portfolio use.
 
-- [ ] Set up `dashboard/` directory with `app.py` and `requirements.txt`
-- [ ] Connect Streamlit to Snowflake via `snowflake-connector-python` using RSA key auth (same key pair as Databricks)
-- [ ] Store Snowflake credentials in Streamlit Cloud secrets (not in repo)
-- [ ] Build dashboard components:
-  - [ ] Stock selector dropdown (AAPL, GOOGL, MSFT, TSLA, AMZN)
-  - [ ] Date range selector
-  - [ ] Candlestick/line price chart with SMA and Bollinger Bands overlay (Plotly)
-  - [ ] RSI chart with overbought (70) and oversold (30) reference lines
-  - [ ] MACD chart with signal line and histogram
-- [ ] Test dashboard locally against Snowflake
+- [x] Decided on Streamlit Community Cloud over Streamlit in Snowflake — SiS is not publicly accessible without a Snowflake account
+- [x] Set up `dashboard/` directory with `app.py` and `requirements.txt`
+- [x] `dashboard/app.py` built:
+  - Stock selector dropdown (AAPL, GOOGL, MSFT, TSLA, AMZN)
+  - Date range picker (defaults to last 180 days)
+  - Metrics row: latest close + delta, RSI, SMA-20, SMA-50, MACD
+  - 3-panel Plotly chart: price + SMA-20/50 + Bollinger Bands / RSI with 70/30 lines / MACD with histogram and signal
+  - Connects to Snowflake via `snowflake-connector-python` + RSA key auth, using `st.secrets`
+  - Data cached with `@st.cache_data(ttl=3600)`
+- [x] `.streamlit/secrets.toml` created locally (gitignored) — template with Snowflake credentials
+  - Note: must live at `dashboard/.streamlit/secrets.toml` when running `streamlit run` from `dashboard/` subdirectory
+- [ ] **IN PROGRESS — Fix local JWT auth error:**
+  - Local `~/rsa_key.pem` fingerprint (`SHA256:PUw88mqTNMUdknWEr/g09N7A3zyyriszORxv2pgoKes=`) does not match key registered in Snowflake (`SHA256:fXaWOVcyW9DHUKgf5KBKVraITfaT7mIDXPy25VfgrqE=`)
+  - Fix: extract correct private key from Databricks Secrets via `dbutils.secrets.get(scope="stock-pipeline", key="snowflake-private-key")` and paste into `secrets.toml`
+- [ ] Test dashboard locally against Snowflake (unblocked once key is fixed)
 - [ ] Deploy to Streamlit Community Cloud (streamlit.io/cloud) — free, public URL, auto-deploys from GitHub
+  - Add same Snowflake secrets in Streamlit Cloud UI secrets manager
 
 ---
 
