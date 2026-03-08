@@ -199,12 +199,12 @@ Multi-schema design (RAW/STAGING/MARTS) replaced with two FCT tables in `BRYAN`.
   - Data cached with `@st.cache_data(ttl=3600)`
 - [x] `.streamlit/secrets.toml` created locally (gitignored) — template with Snowflake credentials
   - Note: must live at `dashboard/.streamlit/secrets.toml` when running `streamlit run` from `dashboard/` subdirectory
-- [ ] **IN PROGRESS — Fix local JWT auth error:**
-  - Local `~/rsa_key.pem` fingerprint (`SHA256:PUw88mqTNMUdknWEr/g09N7A3zyyriszORxv2pgoKes=`) does not match key registered in Snowflake (`SHA256:fXaWOVcyW9DHUKgf5KBKVraITfaT7mIDXPy25VfgrqE=`)
-  - Fix: extract correct private key from Databricks Secrets via `dbutils.secrets.get(scope="stock-pipeline", key="snowflake-private-key")` and paste into `secrets.toml`
-- [ ] Test dashboard locally against Snowflake (unblocked once key is fixed)
-- [ ] Deploy to Streamlit Community Cloud (streamlit.io/cloud) — free, public URL, auto-deploys from GitHub
-  - Add same Snowflake secrets in Streamlit Cloud UI secrets manager
+- [x] Fixed JWT auth error — registered correct public key in Snowflake via DataExpert org UI
+  - Snowflake UI breaks single-line keys; must paste public key with standard 64-char PEM line breaks (no headers)
+  - Active fingerprint: `SHA256:PUw88mqTNMUdknWEr/g09N7A3zyyriszORxv2pgoKes=`
+- [x] Tested dashboard locally — connected to Snowflake, charts rendered successfully
+- [x] Deployed to Streamlit Community Cloud — publicly accessible, auto-deploys on `git push` to `main`
+  - Secrets added via Streamlit Cloud UI settings (paste full `secrets.toml` contents)
 
 ---
 
