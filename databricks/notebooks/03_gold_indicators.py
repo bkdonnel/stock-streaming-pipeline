@@ -22,20 +22,41 @@ GOLD_TABLE = "bootcamp_students.bd_gold.stock_indicators"
 
 # COMMAND ----------
 
-# Resolve repo root dynamically so indicators.py can be imported regardless of
-# which user's Repos path this notebook lives under.
-notebook_path = (
-    dbutils.notebook.entry_point
-    .getDbutils().notebook().getContext()
-    .notebookPath().get()
-)
-# notebook_path: /Repos/<user>/<repo>/databricks/notebooks/03_gold_indicators
-path_parts = notebook_path.lstrip("/").split("/")
-repo_root = "/Workspace/" + "/".join(path_parts[:3])
-databricks_dir = repo_root + "/databricks"
+# Resolve path to indicators.py — tries multiple strategies to handle both
+# interactive Repos execution and Job runs with Git source.
+import os
 
-if databricks_dir not in sys.path:
-    sys.path.insert(0, databricks_dir)
+def _find_indicators_dir() -> str:
+    """Return the directory containing indicators.py."""
+    candidates = []
+
+    # Strategy 1: cwd is repo root when running as a Job with Git source
+    cwd = os.getcwd()
+    candidates.append(os.path.join(cwd, "databricks"))
+    candidates.append(cwd)
+
+    # Strategy 2: dynamic resolution via notebook context (interactive Repos)
+    try:
+        notebook_path = (
+            dbutils.notebook.entry_point
+            .getDbutils().notebook().getContext()
+            .notebookPath().get()
+        )
+        parts = notebook_path.lstrip("/").split("/")
+        repo_root = "/Workspace/" + "/".join(parts[:3])
+        candidates.append(repo_root + "/databricks")
+    except Exception:
+        pass
+
+    for path in candidates:
+        if os.path.isfile(os.path.join(path, "indicators.py")):
+            return path
+
+    raise RuntimeError(f"Could not find indicators.py. Searched: {candidates}")
+
+indicators_dir = _find_indicators_dir()
+if indicators_dir not in sys.path:
+    sys.path.insert(0, indicators_dir)
 
 from indicators import add_indicators
 
