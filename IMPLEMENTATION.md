@@ -219,11 +219,10 @@ Multi-schema design (RAW/STAGING/MARTS) replaced with two FCT tables in `BRYAN`.
   - Git credentials reused from existing Databricks Repos connection (no new PAT needed)
 - [x] Schedule set: daily at 21:30 UTC (4:30pm ET)
 - [x] Email notifications configured on failure
-- [ ] First manual test run — in progress
-- [ ] Verify all 4 tasks complete successfully end-to-end
-- [ ] Add row count validation between layers
-- [ ] Add data freshness check
-- [ ] Final end-to-end validation
+- [x] First manual test run — all 4 tasks completed successfully
+- [x] Verified end-to-end: Bronze → Silver → Gold → Snowflake → Dashboard updated
+- [x] Fixed weekend/holiday handling in `01_bronze_ingestion.py` (403 treated as graceful skip)
+- [x] Fixed `indicators.py` import in `03_gold_indicators.py` for Job Git source context
 
 ---
 

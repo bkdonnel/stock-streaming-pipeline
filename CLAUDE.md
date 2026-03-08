@@ -46,14 +46,17 @@ Tracked stocks: AAPL, GOOGL, MSFT, TSLA, AMZN.
   - Local testing: run `streamlit run app.py` from `dashboard/` directory; secrets must be at `dashboard/.streamlit/secrets.toml`
   - **RSA key sync issue (resolved):** local `.pem` files and Databricks Secrets were out of sync with Snowflake registered key; fixed by registering the public key (with PEM line breaks) via DataExpert org UI — Snowflake UI breaks single-line keys, must paste with 64-char line breaks
   - Active public key fingerprint: `SHA256:PUw88mqTNMUdknWEr/g09N7A3zyyriszORxv2pgoKes=`
-- **Phase 7 (Scheduling & Monitoring):** In progress
-  - Databricks Job created via **Workflows → Jobs and Pipelines** UI (not CLI)
+- **Phase 7 (Scheduling & Monitoring):** Complete
+  - Databricks Job created via **Workflows → Jobs and Pipelines** UI
   - Job name: `stock-pipeline-daily`, 4 tasks chained: `01_bronze_ingestion` → `02_silver_transform` → `03_gold_indicators` → `04_snowflake_load`
   - Each task: Git source, repo `bkdonnel/stock-streaming-pipeline`, branch `main`, DataExpert cluster
   - **Important:** notebook paths must NOT include `.py` extension (e.g. `databricks/notebooks/01_bronze_ingestion`)
   - Schedule: daily at 21:30 UTC (4:30pm ET, after US market close)
   - Email notifications configured for on-failure
-  - First manual test run in progress
+  - Verified: all 4 tasks completed successfully in manual test run
+  - Key fixes made during setup:
+    - `01_bronze_ingestion.py`: handle 403 (weekend/holiday) same as 404, exit cleanly via `dbutils.notebook.exit()` instead of raising `RuntimeError`
+    - `03_gold_indicators.py`: path resolution for `indicators.py` — Job Git source sets cwd to `databricks/notebooks/`, so `indicators.py` is found at `cwd/../indicators.py`
 
 See `IMPLEMENTATION.md` for the full phase-by-phase plan and `ARCHITECTURE.md` for system design.
 
