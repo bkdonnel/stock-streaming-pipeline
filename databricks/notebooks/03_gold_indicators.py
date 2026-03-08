@@ -30,8 +30,10 @@ def _find_indicators_dir() -> str:
     """Return the directory containing indicators.py."""
     candidates = []
 
-    # Strategy 1: cwd is repo root when running as a Job with Git source
+    # Strategy 1: cwd is databricks/notebooks/ in Job with Git source
+    # indicators.py lives one level up in databricks/
     cwd = os.getcwd()
+    candidates.append(os.path.normpath(os.path.join(cwd, "..")))
     candidates.append(os.path.join(cwd, "databricks"))
     candidates.append(cwd)
 
