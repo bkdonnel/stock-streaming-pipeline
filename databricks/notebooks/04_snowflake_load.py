@@ -5,6 +5,10 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install snowflake-connector-python cryptography
+
+# COMMAND ----------
+
 import logging
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
