@@ -46,7 +46,14 @@ Tracked stocks: AAPL, GOOGL, MSFT, TSLA, AMZN.
   - Local testing: run `streamlit run app.py` from `dashboard/` directory; secrets must be at `dashboard/.streamlit/secrets.toml`
   - **RSA key sync issue (resolved):** local `.pem` files and Databricks Secrets were out of sync with Snowflake registered key; fixed by registering the public key (with PEM line breaks) via DataExpert org UI — Snowflake UI breaks single-line keys, must paste with 64-char line breaks
   - Active public key fingerprint: `SHA256:PUw88mqTNMUdknWEr/g09N7A3zyyriszORxv2pgoKes=`
-- **Phase 7 (Scheduling & Monitoring):** Not started
+- **Phase 7 (Scheduling & Monitoring):** In progress
+  - Databricks Job created via **Workflows → Jobs and Pipelines** UI (not CLI)
+  - Job name: `stock-pipeline-daily`, 4 tasks chained: `01_bronze_ingestion` → `02_silver_transform` → `03_gold_indicators` → `04_snowflake_load`
+  - Each task: Git source, repo `bkdonnel/stock-streaming-pipeline`, branch `main`, DataExpert cluster
+  - **Important:** notebook paths must NOT include `.py` extension (e.g. `databricks/notebooks/01_bronze_ingestion`)
+  - Schedule: daily at 21:30 UTC (4:30pm ET, after US market close)
+  - Email notifications configured for on-failure
+  - First manual test run in progress
 
 See `IMPLEMENTATION.md` for the full phase-by-phase plan and `ARCHITECTURE.md` for system design.
 

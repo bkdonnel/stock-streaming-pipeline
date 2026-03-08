@@ -211,13 +211,18 @@ Multi-schema design (RAW/STAGING/MARTS) replaced with two FCT tables in `BRYAN`.
 ## Phase 7: Scheduling & Monitoring
 **Goal:** Automate the pipeline and add observability.
 
-- [ ] Create a Databricks Job that chains all three notebooks in order:
-  `01_bronze_ingestion` → `02_silver_transform` → `03_gold_indicators`
-- [ ] Schedule the job daily at 4:30pm ET (after US market close)
-- [ ] Add email alerts on job failure (Databricks Job notification settings)
-- [ ] Add row count validation between layers (Bronze rows == Silver rows, with exceptions logged)
-- [ ] Add data freshness check: alert if Gold table has no data for the current trading day by 5pm ET
-- [ ] Update `README.md` with setup instructions and architecture diagram
+- [x] Created Databricks Job via Workflows → Jobs and Pipelines UI
+  - Job name: `stock-pipeline-daily`
+  - 4 tasks chained in order: `01_bronze_ingestion` → `02_silver_transform` → `03_gold_indicators` → `04_snowflake_load`
+  - Each task: Git source (`bkdonnel/stock-streaming-pipeline`, `main` branch), DataExpert cluster
+  - Notebook paths must omit `.py` extension (e.g. `databricks/notebooks/01_bronze_ingestion`)
+  - Git credentials reused from existing Databricks Repos connection (no new PAT needed)
+- [x] Schedule set: daily at 21:30 UTC (4:30pm ET)
+- [x] Email notifications configured on failure
+- [ ] First manual test run — in progress
+- [ ] Verify all 4 tasks complete successfully end-to-end
+- [ ] Add row count validation between layers
+- [ ] Add data freshness check
 - [ ] Final end-to-end validation
 
 ---
