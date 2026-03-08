@@ -21,6 +21,9 @@ venv/
 # Databricks
 .databricks/
 
+# Streamlit secrets
+.streamlit/secrets.toml
+
 # Logs
 *.log
 logs/
