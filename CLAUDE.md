@@ -38,7 +38,7 @@ Tracked stocks: AAPL, GOOGL, MSFT, TSLA, AMZN.
   - Verified: `FCT_STOCK_PRICES` and `FCT_TECHNICAL_INDICATORS` written and read back successfully
   - Key lessons: shared cluster is serverless (blocks Maven connectors); RSA public key in Snowflake must match private key in Databricks Secrets (fingerprint mismatch was root cause of JWT errors)
 - **Phase 6 (Streamlit Dashboard):** Complete
-  - `dashboard/app.py` — stock dropdown, date picker, 3-panel Plotly chart (price+BB, RSI, MACD), metrics row
+  - `dashboard/app.py` — stock dropdown, interval selector (1M/3M/6M/1Y/YTD), 3-panel Plotly chart (price+BB, RSI, MACD), metrics row
   - `dashboard/requirements.txt` — streamlit, snowflake-connector-python, cryptography, pandas, plotly
   - Deployed to **Streamlit Community Cloud** (not Streamlit in Snowflake — SiS requires Snowflake login, not publicly accessible)
   - Auto-deploys on every `git push` to `main`
@@ -57,6 +57,12 @@ Tracked stocks: AAPL, GOOGL, MSFT, TSLA, AMZN.
   - Key fixes made during setup:
     - `01_bronze_ingestion.py`: handle 403 (weekend/holiday) same as 404, exit cleanly via `dbutils.notebook.exit()` instead of raising `RuntimeError`
     - `03_gold_indicators.py`: path resolution for `indicators.py` — Job Git source sets cwd to `databricks/notebooks/`, so `indicators.py` is found at `cwd/../indicators.py`
+  - **Backfill:** `05_backfill.py` written to load historical data
+    - Initial attempt used `/v1/open-close` per date — failed (free tier only serves yesterday's data)
+    - Rewrote to use `/v2/aggs/ticker/{ticker}/range/1/day/{from}/{to}` — fetches full date range per symbol in one API call, works on free tier
+  - **Dashboard updates post-launch:**
+    - Replaced date picker with interval radio buttons: 1M / 3M / 6M (default) / 1Y / YTD
+    - Increased chart vertical spacing and height for better readability
 
 See `IMPLEMENTATION.md` for the full phase-by-phase plan and `ARCHITECTURE.md` for system design.
 

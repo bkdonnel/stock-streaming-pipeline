@@ -192,7 +192,7 @@ Multi-schema design (RAW/STAGING/MARTS) replaced with two FCT tables in `BRYAN`.
 - [x] Set up `dashboard/` directory with `app.py` and `requirements.txt`
 - [x] `dashboard/app.py` built:
   - Stock selector dropdown (AAPL, GOOGL, MSFT, TSLA, AMZN)
-  - Date range picker (defaults to last 180 days)
+  - Interval selector: 1M / 3M / 6M (default) / 1Y / YTD radio buttons
   - Metrics row: latest close + delta, RSI, SMA-20, SMA-50, MACD
   - 3-panel Plotly chart: price + SMA-20/50 + Bollinger Bands / RSI with 70/30 lines / MACD with histogram and signal
   - Connects to Snowflake via `snowflake-connector-python` + RSA key auth, using `st.secrets`
@@ -223,6 +223,12 @@ Multi-schema design (RAW/STAGING/MARTS) replaced with two FCT tables in `BRYAN`.
 - [x] Verified end-to-end: Bronze → Silver → Gold → Snowflake → Dashboard updated
 - [x] Fixed weekend/holiday handling in `01_bronze_ingestion.py` (403 treated as graceful skip)
 - [x] Fixed `indicators.py` import in `03_gold_indicators.py` for Job Git source context
+- [x] Wrote `05_backfill.py` to load historical data for meaningful indicator calculations
+  - `/v1/open-close` per-date approach failed — free tier only serves yesterday's data
+  - Rewrote to use `/v2/aggs/ticker/{ticker}/range/1/day/{from}/{to}` — one call per symbol, full range, works on free tier
+- [x] Dashboard improvements post-launch:
+  - Replaced date range picker with interval radio buttons: 1M / 3M / 6M (default) / 1Y / YTD
+  - Increased chart vertical spacing (0.04 → 0.08) and height (750 → 850px)
 
 ---
 
