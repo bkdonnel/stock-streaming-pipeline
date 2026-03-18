@@ -84,7 +84,7 @@ def build_chart(df: pd.DataFrame, symbol: str) -> go.Figure:
         cols=1,
         shared_xaxes=True,
         row_heights=[0.55, 0.225, 0.225],
-        vertical_spacing=0.04,
+        vertical_spacing=0.08,
         subplot_titles=(
             f"{symbol} — Price & Indicators",
             "RSI (14)",
@@ -184,7 +184,7 @@ def build_chart(df: pd.DataFrame, symbol: str) -> go.Figure:
     )
 
     fig.update_layout(
-        height=750,
+        height=850,
         template="plotly_dark",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         margin=dict(l=40, r=40, t=60, b=40),
@@ -205,22 +205,29 @@ st.sidebar.divider()
 
 symbol = st.sidebar.selectbox("Symbol", SYMBOLS)
 
-default_end = date.today()
-default_start = default_end - timedelta(days=180)
-start_date, end_date = st.sidebar.date_input(
+end_date = date.today()
+
+INTERVALS = {
+    "1M":  timedelta(days=30),
+    "3M":  timedelta(days=90),
+    "6M":  timedelta(days=180),
+    "1Y":  timedelta(days=365),
+    "YTD": timedelta(days=(end_date - date(end_date.year, 1, 1)).days),
+}
+
+st.sidebar.markdown("**Date Range**")
+selected_interval = st.sidebar.radio(
     "Date Range",
-    value=(default_start, default_end),
-    min_value=date(2020, 1, 1),
-    max_value=default_end,
+    options=list(INTERVALS.keys()),
+    index=2,
+    horizontal=True,
+    label_visibility="collapsed",
 )
+
+start_date = end_date - INTERVALS[selected_interval]
 
 st.sidebar.divider()
 st.sidebar.caption("Data: Polygon.io via Databricks → Snowflake")
-
-# --- Main ---
-if start_date >= end_date:
-    st.error("Start date must be before end date.")
-    st.stop()
 
 with st.spinner(f"Loading {symbol}..."):
     df = load_data(symbol, str(start_date), str(end_date))
