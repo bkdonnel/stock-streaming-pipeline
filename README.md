@@ -2,7 +2,7 @@
 
 A fully automated, end-to-end batch data pipeline that ingests daily stock market data, computes technical indicators using Apache Spark, stores results in Snowflake, and serves them through a live interactive dashboard.
 
-**[View Live Dashboard](https://your-app.streamlit.app)** <!-- replace with your Streamlit URL -->
+**[View Live Dashboard](https://stock-streaming-pipeline-c7pcopjkberub4kpnuzire.streamlit.app/)**
 
 ---
 
