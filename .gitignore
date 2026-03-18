@@ -23,6 +23,8 @@ venv/
 
 # Streamlit secrets
 .streamlit/secrets.toml
+dashboard/.streamlit/secrets.toml
+**/secrets.toml
 
 # Logs
 *.log
