@@ -15,20 +15,22 @@ Tracked stocks: AAPL, GOOGL, MSFT, TSLA, AMZN.
   - `databricks/notebooks/00_setup.py` written and verified — packages, schemas, secret, and Polygon API all confirmed
 - **Phase 2 (Bronze Layer - Ingestion):** Complete
   - `fetch_daily_ohlcv()` implemented using Polygon `/v1/open-close/{symbol}/{date}` endpoint
-  - Loops over all 5 symbols, collects records, writes to `bootcamp_students.bd_bronze.stock_prices` (Delta, append mode)
+  - Loops over all 5 symbols, collects records, writes to `bootcamp_students.bd_bronze.stock_prices` (Delta)
   - Supports `run_date` widget for backfills; defaults to yesterday
   - Gracefully skips 404s (holidays/weekends)
   - Verified: 5 rows written and confirmed via `spark.table().show()` (2026-03-06 data)
   - Note: `vwap` is `0.0` for all rows — Polygon's `/v1/open-close` endpoint does not return vwap; field is retained for schema compatibility
+  - **Idempotency fix:** writes now use Delta `merge` on `(symbol, date)` instead of append — re-running for the same date is a no-op
 - **Phase 3 (Silver Layer - Cleaning):** Complete
   - `02_silver_transform.py` built and tested — 5 rows in, 5 rows out, no drops
   - Casts `date` to `DateType`, drops null/zero closes, deduplicates on `(symbol, date)` by most recent `ingested_at`, adds `transformed_at` timestamp
-  - Writes to `bootcamp_students.bd_silver.stock_prices` (Delta, overwrite mode)
+  - Uses Write-Audit-Publish: transforms staged to `bd_silver.stock_prices_staging`, audited (row count, no nulls, symbol completeness, close range), then published to `bd_silver.stock_prices` — live table not updated if any check fails
 - **Phase 4 (Gold Layer - Indicators):** Complete
   - `databricks/indicators.py` — pure functions: `calculate_sma`, `calculate_ema`, `calculate_rsi`, `calculate_macd`, `calculate_bollinger_bands`, `add_indicators`
   - `03_gold_indicators.py` — reads Silver, applies `add_indicators` per symbol via `groupBy("symbol").applyInPandas()`, writes to `bootcamp_students.bd_gold.stock_indicators` (Delta, overwrite mode)
   - Repo path resolved dynamically at runtime so import works regardless of Databricks user email
   - Verified: 5 rows in, 5 rows out, 22 columns (symbol + date + 20 indicator fields)
+  - Uses Write-Audit-Publish: staged to `bd_gold.stock_indicators_staging`, audited (row count matches Silver, symbol completeness, RSI in [0,100], SMA-20 positive), then published
 - **Phase 5 (Snowflake Integration):** Complete
   - Snowflake account: `LYWBBPJ-ODB66944`, database: `DATAEXPERT_STUDENT`, schema: `BRYAN`
   - Auth: RSA key pair — public key registered in Snowflake UI, private key stored in Databricks Secrets
@@ -60,6 +62,7 @@ Tracked stocks: AAPL, GOOGL, MSFT, TSLA, AMZN.
   - **Backfill:** `05_backfill.py` written to load historical data
     - Initial attempt used `/v1/open-close` per date — failed (free tier only serves yesterday's data)
     - Rewrote to use `/v2/aggs/ticker/{ticker}/range/1/day/{from}/{to}` — fetches full date range per symbol in one API call, works on free tier
+    - Idempotency fix applied: deduplicates existing Bronze table in place before writing, then merges new records on `(symbol, date)`
   - **Dashboard updates post-launch:**
     - Replaced date picker with interval radio buttons: 1M / 3M / 6M (default) / 1Y / YTD
     - Increased chart vertical spacing and height for better readability
@@ -127,12 +130,14 @@ All computed in the Gold layer using PySpark + pandas UDFs:
 databricks/
   notebooks/
     00_setup.py               # One-time setup: verify env, create schemas, smoke test API
-    01_bronze_ingestion.py    # Fetch from Polygon, write raw to Delta
-    02_silver_transform.py    # Clean, validate, deduplicate
-    03_gold_indicators.py     # Compute SMA, EMA, RSI, MACD, BB
+    01_bronze_ingestion.py    # Fetch from Polygon, merge raw to Delta (idempotent on symbol+date)
+    02_silver_transform.py    # Clean, validate, deduplicate — Write-Audit-Publish to Silver
+    03_gold_indicators.py     # Compute SMA, EMA, RSI, MACD, BB — Write-Audit-Publish to Gold
     04_snowflake_load.py      # Write Gold data to Snowflake FCT tables
+    05_backfill.py            # Historical backfill via Polygon /v2/aggs — idempotent merge
   config.py                  # Shared Spark + API config (secrets + .env fallback)
   indicators.py              # Pure indicator functions (calculate_sma, ema, rsi, macd, bb, add_indicators)
+  audit.py                   # WAP utilities: AuditResult, check_* functions, write_audit_publish
 dashboard/
   app.py                     # Streamlit dashboard (stock dropdown, date picker, price/RSI/MACD charts)
   requirements.txt           # streamlit, snowflake-connector-python, cryptography, pandas, plotly

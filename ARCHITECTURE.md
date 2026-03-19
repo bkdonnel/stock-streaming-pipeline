@@ -52,9 +52,9 @@ Daily batch pipeline that fetches stock market data after market close, computes
 
 ### Data Flow
 1. **Ingest**: Databricks job calls Polygon API, fetches daily OHLCV for AAPL, GOOGL, MSFT, TSLA, AMZN
-2. **Bronze**: Raw data written to Delta Lake as-is — immutable, append-only
-3. **Silver**: Data cleaned, validated, and deduplicated
-4. **Gold**: Technical indicators computed and joined with price data
+2. **Bronze**: Raw data merged into Delta Lake on `(symbol, date)` — idempotent; re-running for the same date is a no-op
+3. **Silver**: Data cleaned and deduplicated, staged, audited (row count, no nulls, symbol completeness, close range), then published to the live Silver table
+4. **Gold**: Technical indicators computed, staged, audited (row count matches Silver, RSI in [0,100], SMA-20 positive), then published to the live Gold table
 5. **Store**: Gold layer written to Snowflake `DATAEXPERT_STUDENT.BRYAN` via `snowflake-connector-python`
 6. **Visualize**: Streamlit queries Snowflake, renders charts
 
@@ -104,6 +104,8 @@ All computed in the Gold notebook on daily closing prices:
 - **Databricks over local Spark**: Managed compute, built-in scheduling, Delta Lake, no infrastructure cost
 - **Medallion architecture**: Standard Databricks pattern; Bronze/Silver/Gold separation makes the pipeline auditable and rerunnable
 - **Snowflake as serving layer**: Decouples compute (Databricks) from serving (Snowflake); Streamlit gets fast SQL query performance
+- **Idempotent Bronze writes**: Delta merge on `(symbol, date)` instead of append — safe to re-run the daily job or backfill without duplicating data
+- **Write-Audit-Publish**: Silver and Gold write to staging tables first, run data quality checks, and only publish to the live table on full pass — prevents bad data from silently overwriting good data downstream
 
 ## Cost Breakdown
 - **Databricks**: FREE (1-year access)

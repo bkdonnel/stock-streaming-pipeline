@@ -232,5 +232,30 @@ Multi-schema design (RAW/STAGING/MARTS) replaced with two FCT tables in `BRYAN`.
 
 ---
 
+## Phase 8: Hardening — Idempotency & Write-Audit-Publish
+
+### Idempotency (Bronze)
+**Problem:** Bronze used `append` mode — re-running the daily job or backfill for the same date produced duplicate rows.
+
+- [x] `01_bronze_ingestion.py`: replaced `append` with Delta `merge` on `(symbol, date)` — inserts only when the pair does not already exist
+- [x] `05_backfill.py`: same merge fix; also deduplicates any existing Bronze rows in place before writing new data (one-time cleanup via window + overwrite)
+
+### Write-Audit-Publish (Silver & Gold)
+**Problem:** Silver and Gold wrote directly to live tables. A bad Bronze write producing 0 rows would silently overwrite good Silver/Gold data downstream.
+
+- [x] Created `databricks/audit.py` with reusable primitives:
+  - `check_row_count(df, min_rows)` — fail if output is empty
+  - `check_row_count_matches(df, expected)` — fail if count doesn't match upstream
+  - `check_no_nulls(df, columns)` — fail if any key column contains nulls
+  - `check_symbols_complete(df, expected)` — fail if any expected symbol is missing
+  - `check_column_range(df, col, min, max)` — fail if values fall outside bounds
+  - `write_audit_publish(spark, df, live_table, staging_table, audit_fn)` — writes to staging, runs audits, publishes on full pass, drops staging and raises on failure
+- [x] `02_silver_transform.py`: stages to `bd_silver.stock_prices_staging`, audits (row count, symbols, no nulls in symbol/date/close, close in valid range), publishes to `bd_silver.stock_prices`
+- [x] `03_gold_indicators.py`: stages to `bd_gold.stock_indicators_staging`, audits (row count matches Silver, symbols, RSI in [0,100], SMA-20 positive), publishes to `bd_gold.stock_indicators`
+
+**Effect:** Live tables are never overwritten when data quality checks fail — the pipeline errors loudly and leaves the previous good data in place.
+
+---
+
 ## Previously Completed (Deprecated Kafka/Streaming Phases)
 The original Phases 1-2 (local Kafka setup and Python Kafka producer) were built and tested successfully but are no longer part of the pipeline. The Polygon API fetch logic in `kafka/producer/utils.py` was reused in Phase 2 above.
