@@ -7,6 +7,7 @@
 import sys
 import logging
 
+from pyspark.sql import DataFrame
 from pyspark.sql.types import (
     StructType, StructField,
     StringType, DateType, DoubleType, LongType, TimestampType,
@@ -17,8 +18,10 @@ logger = logging.getLogger(__name__)
 
 # COMMAND ----------
 
-SILVER_TABLE = "bootcamp_students.bd_silver.stock_prices"
-GOLD_TABLE = "bootcamp_students.bd_gold.stock_indicators"
+SILVER_TABLE   = "bootcamp_students.bd_silver.stock_prices"
+GOLD_TABLE     = "bootcamp_students.bd_gold.stock_indicators"
+STAGING_TABLE  = "bootcamp_students.bd_gold.stock_indicators_staging"
+EXPECTED_SYMBOLS = ["AAPL", "GOOGL", "MSFT", "TSLA", "AMZN"]
 
 # COMMAND ----------
 
@@ -61,6 +64,10 @@ if indicators_dir not in sys.path:
     sys.path.insert(0, indicators_dir)
 
 from indicators import add_indicators
+from audit import (
+    write_audit_publish, check_row_count_matches, check_symbols_complete,
+    check_column_range, AuditResult,
+)
 
 # COMMAND ----------
 
@@ -108,9 +115,17 @@ gold_df = (
     .applyInPandas(add_indicators, schema=GOLD_SCHEMA)
 )
 
-gold_df.write.format("delta").mode("overwrite").saveAsTable(GOLD_TABLE)
+def gold_audits(df: DataFrame) -> list[AuditResult]:
+    return [
+        check_row_count_matches(df, silver_count),
+        check_symbols_complete(df, EXPECTED_SYMBOLS),
+        check_column_range(df, "rsi_14", min_val=0.0, max_val=100.0),
+        check_column_range(df, "sma_20", min_val=0.01, max_val=1_000_000.0),
+    ]
 
-gold_count = gold_df.count()
+write_audit_publish(spark, gold_df, GOLD_TABLE, STAGING_TABLE, gold_audits)
+
+gold_count = spark.table(GOLD_TABLE).count()
 logger.info("Gold row count: %d", gold_count)
 print(f"Silver rows: {silver_count} | Gold rows: {gold_count}")
 
