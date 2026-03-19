@@ -14,7 +14,9 @@ from pyspark.sql.types import (
     StructType, StructField,
     StringType, DoubleType, LongType,
 )
-from pyspark.sql.functions import current_timestamp
+from pyspark.sql.functions import current_timestamp, row_number
+from pyspark.sql.window import Window
+from delta.tables import DeltaTable
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -107,13 +109,33 @@ if not all_records:
 
 # COMMAND ----------
 
-# Write all records to Bronze (append mode)
+# One-time deduplication of existing Bronze rows before writing new data
+if DeltaTable.isDeltaTable(spark, BRONZE_TABLE):
+    existing = spark.table(BRONZE_TABLE)
+    window = Window.partitionBy("symbol", "date").orderBy(existing["ingested_at"].desc())
+    deduped = (
+        existing
+        .withColumn("_rn", row_number().over(window))
+        .filter("_rn = 1")
+        .drop("_rn")
+    )
+    deduped.write.format("delta").mode("overwrite").option("overwriteSchema", "false").saveAsTable(BRONZE_TABLE)
+    print("Bronze deduplicated.")
+
+# Merge new records into Bronze (insert-only on new symbol+date pairs)
 df = (
     spark.createDataFrame(all_records, schema=BRONZE_SCHEMA)
     .withColumn("ingested_at", current_timestamp())
 )
 
-df.write.format("delta").mode("append").saveAsTable(BRONZE_TABLE)
+if DeltaTable.isDeltaTable(spark, BRONZE_TABLE):
+    DeltaTable.forName(spark, BRONZE_TABLE).alias("t").merge(
+        df.alias("s"),
+        "t.symbol = s.symbol AND t.date = s.date"
+    ).whenNotMatchedInsertAll().execute()
+else:
+    df.write.format("delta").mode("append").saveAsTable(BRONZE_TABLE)
+
 print(f"Written {df.count()} rows to {BRONZE_TABLE}")
 
 # COMMAND ----------

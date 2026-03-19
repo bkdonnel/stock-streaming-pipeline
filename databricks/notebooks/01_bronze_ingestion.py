@@ -17,6 +17,7 @@ from pyspark.sql.types import (
     StringType, DateType, DoubleType, LongType,
 )
 from pyspark.sql.functions import current_timestamp
+from delta.tables import DeltaTable
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -126,13 +127,19 @@ if not records:
 
 # COMMAND ----------
 
-# Convert to Spark DataFrame and write to Bronze (append — never overwrite raw data)
+# Convert to Spark DataFrame and merge into Bronze (insert-only on new symbol+date pairs)
 df = (
     spark.createDataFrame(records, schema=BRONZE_SCHEMA)
     .withColumn("ingested_at", current_timestamp())
 )
 
-df.write.format("delta").mode("append").saveAsTable(BRONZE_TABLE)
+if DeltaTable.isDeltaTable(spark, BRONZE_TABLE):
+    DeltaTable.forName(spark, BRONZE_TABLE).alias("t").merge(
+        df.alias("s"),
+        "t.symbol = s.symbol AND t.date = s.date"
+    ).whenNotMatchedInsertAll().execute()
+else:
+    df.write.format("delta").mode("append").saveAsTable(BRONZE_TABLE)
 
 print(f"Written {df.count()} rows to {BRONZE_TABLE}")
 
