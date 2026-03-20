@@ -110,7 +110,7 @@ if not all_records:
 # COMMAND ----------
 
 # One-time deduplication of existing Bronze rows before writing new data
-if DeltaTable.isDeltaTable(spark, BRONZE_TABLE):
+if spark.catalog.tableExists(BRONZE_TABLE):
     existing = spark.table(BRONZE_TABLE)
     window = Window.partitionBy("symbol", "date").orderBy(existing["ingested_at"].desc())
     deduped = (
@@ -128,7 +128,7 @@ df = (
     .withColumn("ingested_at", current_timestamp())
 )
 
-if DeltaTable.isDeltaTable(spark, BRONZE_TABLE):
+if spark.catalog.tableExists(BRONZE_TABLE):
     DeltaTable.forName(spark, BRONZE_TABLE).alias("t").merge(
         df.alias("s"),
         "t.symbol = s.symbol AND t.date = s.date"

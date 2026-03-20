@@ -133,7 +133,7 @@ df = (
     .withColumn("ingested_at", current_timestamp())
 )
 
-if DeltaTable.isDeltaTable(spark, BRONZE_TABLE):
+if spark.catalog.tableExists(BRONZE_TABLE):
     DeltaTable.forName(spark, BRONZE_TABLE).alias("t").merge(
         df.alias("s"),
         "t.symbol = s.symbol AND t.date = s.date"
