@@ -78,6 +78,36 @@ def load_data(symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
     return df
 
 
+@st.cache_data(ttl=3600)
+def load_signals(symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT DATE, CLOSE, RSI_14,
+                   SIGNAL_RSI, SIGNAL_MACD, SIGNAL_BB, SIGNAL_SMA_CROSS,
+                   BULLISH_COUNT, BEARISH_COUNT,
+                   COMPOSITE_SIGNAL, SIGNAL_STRENGTH
+            FROM FCT_SIGNALS
+            WHERE SYMBOL = %s
+              AND DATE BETWEEN %s AND %s
+            ORDER BY DATE
+            """,
+            (symbol, start_date, end_date),
+        )
+        df = cursor.fetch_pandas_all()
+    finally:
+        cursor.close()
+
+    df.columns = [c.lower() for c in df.columns]
+    df["date"] = pd.to_datetime(df["date"])
+    df["signal_strength"] = pd.to_numeric(df["signal_strength"], errors="coerce")
+    df["bullish_count"] = pd.to_numeric(df["bullish_count"], errors="coerce")
+    df["bearish_count"] = pd.to_numeric(df["bearish_count"], errors="coerce")
+    return df
+
+
 def build_chart(df: pd.DataFrame, symbol: str) -> go.Figure:
     fig = make_subplots(
         rows=3,
@@ -231,6 +261,7 @@ st.sidebar.caption("Data: Polygon.io via Databricks → Snowflake")
 
 with st.spinner(f"Loading {symbol}..."):
     df = load_data(symbol, str(start_date), str(end_date))
+    signals_df = load_signals(symbol, str(start_date), str(end_date))
 
 if df.empty:
     st.warning(f"No data found for {symbol} between {start_date} and {end_date}.")
@@ -250,3 +281,115 @@ col4.metric("SMA 50", f"${latest['sma_50']:.2f}" if pd.notna(latest["sma_50"]) e
 col5.metric("MACD", f"{latest['macd_line']:.4f}" if pd.notna(latest["macd_line"]) else "—")
 
 st.plotly_chart(build_chart(df, symbol), use_container_width=True)
+
+# --- Trading Signals Section ---
+st.divider()
+st.subheader("Trading Signals")
+
+_SIGNAL_COLORS = {
+    "strong_buy":  ("#00c853", "Strong Buy"),
+    "buy":         ("#69f0ae", "Buy"),
+    "neutral":     ("#9e9e9e", "Neutral"),
+    "sell":        ("#ff6d00", "Sell"),
+    "strong_sell": ("#d50000", "Strong Sell"),
+}
+_COMPONENT_COLORS = {"bullish": "#69f0ae", "bearish": "#ff6d00", "neutral": "#9e9e9e"}
+
+if signals_df.empty:
+    st.info("No signal data available for this period. Run notebook 06_signals.py to generate signals.")
+else:
+    latest_sig = signals_df.iloc[-1]
+    composite = str(latest_sig["composite_signal"]).lower()
+    color, label = _SIGNAL_COLORS.get(composite, ("#9e9e9e", composite.replace("_", " ").title()))
+    strength = float(latest_sig["signal_strength"])
+
+    sig_col1, sig_col2 = st.columns([1, 3])
+
+    with sig_col1:
+        st.markdown(
+            f"""
+            <div style="text-align:center; padding:16px; border-radius:8px;
+                        background-color:{color}22; border:2px solid {color};">
+                <div style="font-size:2rem; font-weight:700; color:{color};">{label}</div>
+                <div style="font-size:1rem; color:#ccc;">as of {latest_sig['date'].strftime('%Y-%m-%d')}</div>
+                <div style="font-size:1.1rem; margin-top:8px;">
+                    Strength: <b>{strength:+.2f}</b>
+                    &nbsp;|&nbsp;
+                    {int(latest_sig['bullish_count'])} bullish
+                    &nbsp;/&nbsp;
+                    {int(latest_sig['bearish_count'])} bearish
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown("<br>**Signal Breakdown (latest)**", unsafe_allow_html=True)
+        components = {
+            "RSI":       latest_sig["signal_rsi"],
+            "MACD Cross":latest_sig["signal_macd"],
+            "Bollinger": latest_sig["signal_bb"],
+            "SMA Cross": latest_sig["signal_sma_cross"],
+        }
+        for name, val in components.items():
+            c = _COMPONENT_COLORS.get(str(val).lower(), "#9e9e9e")
+            st.markdown(
+                f'<span style="color:{c}; font-weight:600;">{val.upper()}</span> &nbsp; {name}',
+                unsafe_allow_html=True,
+            )
+
+    with sig_col2:
+        fig_sig = go.Figure()
+        fig_sig.add_trace(go.Scatter(
+            x=signals_df["date"],
+            y=signals_df["signal_strength"],
+            mode="lines+markers",
+            line=dict(width=2, color="#1f77b4"),
+            marker=dict(
+                size=6,
+                color=[
+                    _SIGNAL_COLORS.get(str(s).lower(), ("#9e9e9e", ""))[0]
+                    for s in signals_df["composite_signal"]
+                ],
+                line=dict(width=1, color="#fff"),
+            ),
+            name="Signal Strength",
+        ))
+        fig_sig.add_hline(y=0, line=dict(color="#666", dash="dot", width=1))
+        fig_sig.add_hrect(y0=0.25, y1=1.05,  fillcolor="rgba(0,200,83,0.06)",  line_width=0)
+        fig_sig.add_hrect(y0=-1.05, y1=-0.25, fillcolor="rgba(213,0,0,0.06)", line_width=0)
+        fig_sig.update_layout(
+            height=320,
+            template="plotly_dark",
+            margin=dict(l=40, r=20, t=30, b=40),
+            yaxis=dict(title="Signal Strength", range=[-1.1, 1.1]),
+            xaxis=dict(title="Date"),
+            showlegend=False,
+            hovermode="x unified",
+        )
+        st.plotly_chart(fig_sig, use_container_width=True)
+
+    # Signal history table (last 10 rows)
+    with st.expander("Signal history (last 10 trading days)"):
+        history = signals_df.tail(10).copy()
+        history["date"] = history["date"].dt.strftime("%Y-%m-%d")
+        history["signal_strength"] = history["signal_strength"].map("{:+.2f}".format)
+        st.dataframe(
+            history[[
+                "date", "close", "signal_rsi", "signal_macd",
+                "signal_bb", "signal_sma_cross",
+                "bullish_count", "bearish_count",
+                "composite_signal", "signal_strength",
+            ]].rename(columns={
+                "signal_rsi": "RSI",
+                "signal_macd": "MACD",
+                "signal_bb": "Bollinger",
+                "signal_sma_cross": "SMA Cross",
+                "bullish_count": "Bullish",
+                "bearish_count": "Bearish",
+                "composite_signal": "Composite",
+                "signal_strength": "Strength",
+            }),
+            use_container_width=True,
+            hide_index=True,
+        )
